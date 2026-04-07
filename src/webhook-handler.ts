@@ -15,6 +15,7 @@ import { TrelloNotFoundError } from "./trello-client.js";
 
 export interface WebhookHandlerDeps {
   ctx: PluginContext;
+  companyId: string;
   trello: TrelloClient;
   syncStore: SyncStore;
   pendingQueue: PendingQueue;
@@ -29,8 +30,7 @@ export async function handleTrelloWebhook(
   input: PluginWebhookInput,
   deps: WebhookHandlerDeps,
 ): Promise<{ status: number }> {
-  const { ctx, config, apiSecret, callbackUrl } = deps;
-  const { companyId } = ctx as unknown as { companyId: string };
+  const { ctx, companyId, config, apiSecret, callbackUrl } = deps;
 
   // Trello sends HEAD to verify the endpoint — respond 200
   // (The host handles HEAD automatically; this guard is defensive)
@@ -114,8 +114,9 @@ async function handleCardCreated(action: TrelloAction, deps: WebhookHandlerDeps)
 
   inFlightPaperclipCreations.add(cardId);
   try {
+    const companyId = deps.companyId;
     const issue = await ctx.issues.create({
-      companyId: getCompanyId(ctx),
+      companyId,
       title: cardName,
       description: action.data.card?.desc ? stripSyncTag(action.data.card.desc) : undefined,
     });
@@ -125,7 +126,7 @@ async function handleCardCreated(action: TrelloAction, deps: WebhookHandlerDeps)
       await ctx.issues.update(
         issue.id,
         { status: status as Parameters<typeof ctx.issues.update>[1]["status"] },
-        getCompanyId(ctx),
+        companyId,
       );
     }
 
@@ -157,7 +158,7 @@ async function handleCardUpdated(action: TrelloAction, deps: WebhookHandlerDeps)
     return;
   }
 
-  const companyId = getCompanyId(ctx);
+  const companyId = deps.companyId;
   const patch: Record<string, unknown> = {};
 
   // Card archived?
@@ -251,9 +252,3 @@ function reverseMapListId(
   return REVERSE_STATUS_MAP[entry[0] as keyof typeof REVERSE_STATUS_MAP];
 }
 
-/** Extract companyId from the PluginContext (passed in via closure in worker.ts). */
-function getCompanyId(ctx: PluginContext): string {
-  // companyId is closed over in the worker; this helper is just for clarity.
-  // In practice, the handlers are called with a closed-over companyId — see worker.ts.
-  return (ctx as unknown as { _companyId?: string })._companyId ?? "";
-}

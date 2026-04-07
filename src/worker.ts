@@ -296,6 +296,7 @@ const plugin = definePlugin({
 
     await handleTrelloWebhook(input, {
       ctx,
+      companyId,
       trello,
       syncStore,
       pendingQueue,
