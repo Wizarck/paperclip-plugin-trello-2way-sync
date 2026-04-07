@@ -14,6 +14,7 @@ export const STATE_KEYS = {
   lastError: "lastError",
   autoListIds: "auto:listIds",
   autoLabelIds: "auto:labelIds",
+  defaultAgentId: "auto:defaultAgentId",
   pending: (op: string, id: string) => `pending:${op}:${id}`,
 } as const;
 

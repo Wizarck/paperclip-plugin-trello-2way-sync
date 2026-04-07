@@ -129,6 +129,7 @@ async function handleCardCreated(action: TrelloAction, deps: WebhookHandlerDeps)
       companyId,
       title: cardName,
       description: action.data.card?.desc ? stripSyncTag(action.data.card.desc) : undefined,
+      assigneeAgentId: deps.config.defaultAssigneeAgentId,
     });
 
     // Update status if not default
@@ -227,13 +228,29 @@ async function handleCardUpdated(action: TrelloAction, deps: WebhookHandlerDeps)
     // Paperclip business rule: in_progress requires an assignee — warn instead of error, don't retry
     if (errMsg.includes("require an assignee") || errMsg.includes("requires an assignee")) {
       // Fallback: use in_review (closest status that doesn't require an assignee)
-      const fallbackPatch = { ...patch, status: "in_review" } as Parameters<typeof ctx.issues.update>[1];
-      try {
-        await ctx.issues.update(issueId, fallbackPatch, companyId);
-        await syncStore.touchMapping(issueId, "trello");
-        ctx.logger.warn("trello-sync: status fell back to in_review (in_progress requires assignee)", { issueId, cardId });
-      } catch (fallbackErr) {
-        ctx.logger.warn("trello-sync: fallback to in_review also failed", { issueId, errMsg: String(fallbackErr) });
+      // Retry with assignee if we have one, otherwise fall back to in_review
+      const agentId = deps.config.defaultAssigneeAgentId;
+      if (agentId) {
+        try {
+          const patchWithAssignee = { ...patch, assigneeAgentId: agentId } as Parameters<typeof ctx.issues.update>[1];
+          await ctx.issues.update(issueId, patchWithAssignee, companyId);
+          await syncStore.touchMapping(issueId, "trello");
+          ctx.logger.info("trello-sync: status updated with auto-assigned agent", { issueId, agentId });
+        } catch (retryErr) {
+          ctx.logger.warn("trello-sync: retry with assignee also failed, falling back to in_review", { issueId, errMsg: String(retryErr) });
+          try {
+            await ctx.issues.update(issueId, { ...patch, status: "in_review" } as Parameters<typeof ctx.issues.update>[1], companyId);
+            await syncStore.touchMapping(issueId, "trello");
+          } catch { /* best effort */ }
+        }
+      } else {
+        try {
+          await ctx.issues.update(issueId, { ...patch, status: "in_review" } as Parameters<typeof ctx.issues.update>[1], companyId);
+          await syncStore.touchMapping(issueId, "trello");
+          ctx.logger.warn("trello-sync: status fell back to in_review (no default agent configured)", { issueId, cardId });
+        } catch (fallbackErr) {
+          ctx.logger.warn("trello-sync: fallback to in_review also failed", { issueId, errMsg: String(fallbackErr) });
+        }
       }
       return;
     }

@@ -23,6 +23,7 @@ export const manifest: PaperclipPluginManifestV1 = {
     "webhooks.receive",
     "metrics.write",
     "companies.read",
+    "agents.read",
   ],
   entrypoints: {
     worker: "./dist/worker.js",
@@ -61,6 +62,13 @@ export const manifest: PaperclipPluginManifestV1 = {
         title: "Paperclip Public URL",
         description:
           "Public HTTPS URL of this Paperclip instance. Required only for Trello→Paperclip sync (card moves, renames, archives updating Paperclip issues). When set, the plugin automatically registers a webhook in Trello — no manual setup needed. The registered URL will be: {this_url}/api/plugins/trello-sync/webhooks/trello-events. Leave empty if you only need Paperclip→Trello sync. Example: https://paperclip.yourdomain.com",
+      },
+
+      defaultAssigneeAgentId: {
+        type: "string",
+        title: "Default Assignee Agent ID",
+        description:
+          "Agent ID to auto-assign to issues created from Trello cards, and used as fallback when moving issues to 'In Progress' (which requires an assignee). If left empty, the plugin auto-selects the first available agent. You can find agent IDs in Paperclip → Settings → Agents.",
       },
 
       // Feature toggles — Paperclip → Trello
