@@ -37,7 +37,7 @@ const plugin = definePlugin({
       return (await ctx.config.get()) as unknown as TrelloSyncConfig;
     }
 
-    // Returns config enriched with auto-provisioned listIds/labelIds/defaultAgentId from state
+    // Returns config enriched with auto-provisioned listIds/labelIds from state
     async function getEffectiveConfig(): Promise<TrelloSyncConfig> {
       const config = await getConfig();
       const hasListIds = STATUS_KEYS.some((k) => config.listIds?.[k as keyof typeof config.listIds]);
@@ -54,14 +54,6 @@ const plugin = definePlugin({
         })) as Record<string, string> | null;
         if (stateListIds) config.listIds = stateListIds as TrelloSyncConfig["listIds"];
         if (stateLabelIds) config.labelIds = stateLabelIds as TrelloSyncConfig["labelIds"];
-      }
-      if (!config.defaultAssigneeAgentId) {
-        const stateAgentId = (await ctx.state.get({
-          scopeKind: "company",
-          scopeId: companyId,
-          stateKey: STATE_KEYS.defaultAgentId,
-        })) as string | null;
-        if (stateAgentId) config.defaultAssigneeAgentId = stateAgentId;
       }
       return config;
     }
@@ -251,29 +243,6 @@ const plugin = definePlugin({
         }
       }
 
-      // Auto-detect default assignee agent if not configured
-      if (!config.defaultAssigneeAgentId) {
-        const storedAgentId = (await ctx.state.get({
-          scopeKind: "company",
-          scopeId: companyId,
-          stateKey: STATE_KEYS.defaultAgentId,
-        })) as string | null;
-        if (!storedAgentId) {
-          try {
-            const agents = await ctx.agents.list({ companyId, limit: 1 });
-            if (agents[0]?.id) {
-              await ctx.state.set(
-                { scopeKind: "company", scopeId: companyId, stateKey: STATE_KEYS.defaultAgentId },
-                agents[0].id,
-              );
-              ctx.logger.info("trello-sync: auto-detected default assignee agent", { agentId: agents[0].id, agentName: agents[0].name });
-            }
-          } catch (err) {
-            ctx.logger.warn("trello-sync: could not auto-detect default agent", { err: String(err) });
-          }
-        }
-      }
-
       // Register webhook if URL is configured
       if (config.paperclipBaseUrl && config.boardId) {
         const trello = await buildTrelloClient(config);
@@ -310,15 +279,11 @@ const plugin = definePlugin({
     const stateLabelIds = (await ctx.state.get({
       scopeKind: "company", scopeId: companyId, stateKey: STATE_KEYS.autoLabelIds,
     })) as Record<string, string> | null;
-    const stateAgentId = (await ctx.state.get({
-      scopeKind: "company", scopeId: companyId, stateKey: STATE_KEYS.defaultAgentId,
-    })) as string | null;
     const hasListIds = STATUS_KEYS.some((k) => baseConfig.listIds?.[k as keyof typeof baseConfig.listIds]);
     const config: TrelloSyncConfig = {
       ...baseConfig,
       listIds: hasListIds ? baseConfig.listIds : (stateListIds as TrelloSyncConfig["listIds"] ?? baseConfig.listIds),
       labelIds: hasListIds ? baseConfig.labelIds : (stateLabelIds as TrelloSyncConfig["labelIds"] ?? baseConfig.labelIds),
-      defaultAssigneeAgentId: baseConfig.defaultAssigneeAgentId || stateAgentId || undefined,
     };
     const apiKey = config.apiKeyRef;
     const apiSecret = config.apiSecretRef;

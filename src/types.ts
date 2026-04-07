@@ -7,7 +7,6 @@ export interface TrelloSyncConfig {
   tokenRef: string;
   boardId: string;
   paperclipBaseUrl?: string;
-  defaultAssigneeAgentId?: string;
 
   // List names (used for auto-create)
   listNames?: Partial<Record<StatusKey, string>>;
