@@ -10,6 +10,7 @@ import { handleTrelloWebhook } from "./webhook-handler.js";
 import { registerBridgeHandlers } from "./bridge.js";
 import { reconcileAllIssues } from "./reconcile.js";
 import {
+  PLUGIN_ID,
   WEBHOOK_KEY,
   STATE_KEYS,
   STATUS_KEYS,
@@ -70,7 +71,7 @@ const plugin = definePlugin({
 
     function callbackUrl(config: TrelloSyncConfig): string {
       const base = (config.paperclipBaseUrl ?? "").replace(/\/$/, "");
-      return `${base}/api/plugins/${WEBHOOK_KEY}/webhooks/${WEBHOOK_KEY}`;
+      return `${base}/api/plugins/${PLUGIN_ID}/webhooks/${WEBHOOK_KEY}`;
     }
 
     // ─── Bridge handlers ─────────────────────────────────────────────────────
@@ -484,7 +485,7 @@ runWorker(plugin, import.meta.url);
 
 function buildCallbackUrl(config: TrelloSyncConfig): string {
   const base = (config.paperclipBaseUrl ?? "").replace(/\/$/, "");
-  return `${base}/api/plugins/${WEBHOOK_KEY}/webhooks/${WEBHOOK_KEY}`;
+  return `${base}/api/plugins/${PLUGIN_ID}/webhooks/${WEBHOOK_KEY}`;
 }
 
 function isPublicHttpsUrl(url: string): boolean {

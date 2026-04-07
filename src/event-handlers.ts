@@ -29,6 +29,14 @@ export async function handleIssueCreated(
   if (!issueId) return;
   if (!(config.createCardOnNewIssue ?? true)) return;
 
+  ctx.logger.info("trello-sync: issue.created payload", {
+    issueId,
+    title: issue.title,
+    status: issue.status,
+    priority: issue.priority,
+    descriptionLength: issue.description?.length ?? 0,
+  });
+
   // Check if this issue was created by us (Trello→Paperclip flow)
   const existingMapping = await syncStore.getByIssueId(issueId);
   if (existingMapping) {
