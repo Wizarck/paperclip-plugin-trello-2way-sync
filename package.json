@@ -1,0 +1,42 @@
+{
+  "name": "paperclip-plugin-trello-sync",
+  "version": "1.0.0",
+  "description": "Two-way sync between Paperclip issues and Trello cards with configurable list mapping, priority labels, and feature toggles",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "paperclipPlugin": {
+    "manifest": "./dist/manifest.js",
+    "worker": "./dist/worker.js"
+  },
+  "peerDependencies": {
+    "@paperclipai/plugin-sdk": "*",
+    "@paperclipai/shared": "*"
+  },
+  "devDependencies": {
+    "@paperclipai/plugin-sdk": "^2026.403.0",
+    "@paperclipai/shared": "^2026.403.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  },
+  "files": [
+    "dist/"
+  ],
+  "keywords": [
+    "paperclip",
+    "paperclip-plugin",
+    "trello",
+    "sync",
+    "integration"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paperclipai/paperclip-plugin-trello-sync.git"
+  }
+}
