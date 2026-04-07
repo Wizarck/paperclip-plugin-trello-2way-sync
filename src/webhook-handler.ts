@@ -226,13 +226,15 @@ async function handleCardUpdated(action: TrelloAction, deps: WebhookHandlerDeps)
     const errMsg = String(err);
     // Paperclip business rule: in_progress requires an assignee — warn instead of error, don't retry
     if (errMsg.includes("require an assignee") || errMsg.includes("requires an assignee")) {
-      ctx.logger.warn("trello-sync: status update skipped — issue requires an assignee in Paperclip before moving to this status", { issueId, cardId, patch });
-      await ctx.activity.log({
-        companyId,
-        message: `⚠️ Trello Sync: no se pudo actualizar el estado a "${patch.status}" — el issue debe tener un agente asignado en Paperclip.`,
-        entityType: "issue",
-        entityId: issueId,
-      });
+      // Fallback: use in_review (closest status that doesn't require an assignee)
+      const fallbackPatch = { ...patch, status: "in_review" } as Parameters<typeof ctx.issues.update>[1];
+      try {
+        await ctx.issues.update(issueId, fallbackPatch, companyId);
+        await syncStore.touchMapping(issueId, "trello");
+        ctx.logger.warn("trello-sync: status fell back to in_review (in_progress requires assignee)", { issueId, cardId });
+      } catch (fallbackErr) {
+        ctx.logger.warn("trello-sync: fallback to in_review also failed", { issueId, errMsg: String(fallbackErr) });
+      }
       return;
     }
     ctx.logger.error("trello-sync: failed to update Paperclip issue from webhook", { issueId, cardId, patch, errMsg });
