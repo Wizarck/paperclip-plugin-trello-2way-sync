@@ -23,19 +23,11 @@ export async function handleIssueCreated(
 ): Promise<void> {
   const { ctx, trello, syncStore, config, inFlightTrelloCreations } = deps;
   const { companyId } = event;
-  const issue = event.payload as Issue;
-  const issueId = issue.id ?? event.entityId;
+  const partialIssue = event.payload as Issue;
+  const issueId = partialIssue.id ?? event.entityId;
 
   if (!issueId) return;
   if (!(config.createCardOnNewIssue ?? true)) return;
-
-  ctx.logger.info("trello-sync: issue.created payload", {
-    issueId,
-    title: issue.title,
-    status: issue.status,
-    priority: issue.priority,
-    descriptionLength: issue.description?.length ?? 0,
-  });
 
   // Check if this issue was created by us (Trello→Paperclip flow)
   const existingMapping = await syncStore.getByIssueId(issueId);
@@ -43,6 +35,10 @@ export async function handleIssueCreated(
     // Already mapped — was created by the Trello→Paperclip flow, skip
     return;
   }
+
+  // Fetch the full issue — the event payload only contains basic fields (id, title)
+  // and does NOT include description, priority, or status.
+  const issue = (await ctx.issues.get(issueId, companyId)) ?? partialIssue;
 
   // listIds required
   const listIds = config.listIds;
@@ -107,8 +103,8 @@ export async function handleIssueUpdated(
 ): Promise<void> {
   const { ctx, trello, syncStore, config } = deps;
   const { companyId } = event;
-  const issue = event.payload as Issue;
-  const issueId = issue.id ?? event.entityId;
+  const partialIssue = event.payload as Issue;
+  const issueId = partialIssue.id ?? event.entityId;
 
   if (!issueId) return;
 
@@ -120,6 +116,9 @@ export async function handleIssueUpdated(
     await ctx.metrics.write("trello_sync.debounce.skipped", 1);
     return;
   }
+
+  // Fetch full issue — event payload only contains basic fields
+  const issue = (await ctx.issues.get(issueId, companyId)) ?? partialIssue;
 
   const cardId = mapping.trelloCardId;
   const patch: Record<string, unknown> = {};
