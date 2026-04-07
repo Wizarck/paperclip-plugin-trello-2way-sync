@@ -54,7 +54,7 @@ export const manifest: PaperclipPluginManifestV1 = {
         type: "string",
         title: "Trello Board ID",
         description:
-          "The ID of the Trello board to sync with. Open your board in Trello and add '.json' to the URL — the 'id' field at the top is your Board ID. On first activation, the plugin will automatically create 7 lists on this board (Pendiente, Por Hacer, En Progreso, En Revisión, Bloqueado, Completado, Cancelado) and 4 priority labels (Urgente, Alta, Media, Baja). These lists will be used for all sync operations — do not delete or rename them.",
+          "The ID of the Trello board to sync with. Open your board in Trello and add '.json' to the URL — the 'id' field at the top is your Board ID. On first activation, the plugin will automatically create 7 lists on this board (Pendiente, Por Hacer, En Progreso, En Revisión, Bloqueado, Completado, Cancelado) and 4 priority labels (Crítica, Alta, Media, Baja). These lists will be used for all sync operations — do not delete or rename them.",
       },
       paperclipBaseUrl: {
         type: "string",

@@ -67,7 +67,7 @@ On first activation, the plugin automatically creates **7 lists** and **4 priori
 
 | Paperclip priority | Trello label | Color |
 |---|---|---|
-| Urgent | Urgente | 🔴 Red |
+| Critical | Crítica | 🔴 Red |
 | High | Alta | 🟠 Orange |
 | Medium | Media | 🟡 Yellow |
 | Low | Baja | 🟢 Green |

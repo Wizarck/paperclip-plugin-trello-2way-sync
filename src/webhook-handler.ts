@@ -41,8 +41,17 @@ export async function handleTrelloWebhook(
     ? input.headers["x-trello-webhook"][0]
     : (input.headers["x-trello-webhook"] as string | undefined);
 
+  ctx.logger.info("trello-sync: webhook received", {
+    hasSignature: !!signature,
+    hasSecret: !!apiSecret,
+    callbackUrl,
+  });
+
   if (!signature || !verifyTrelloWebhook(input.rawBody, signature, callbackUrl, apiSecret)) {
-    ctx.logger.warn("trello-sync: webhook HMAC verification failed");
+    ctx.logger.warn("trello-sync: webhook HMAC verification failed", {
+      hasSignature: !!signature,
+      hasSecret: !!apiSecret,
+    });
     await ctx.metrics.write("trello_sync.error", 1, { type: "hmac_fail" });
     return { status: 403 };
   }
@@ -69,6 +78,7 @@ export async function handleTrelloWebhook(
   await ctx.state.set(scopeKey, Date.now());
   // Note: state TTL not available in SDK — we rely on the 5-min dedup window being short
 
+  ctx.logger.info("trello-sync: routing action", { type: action.type, cardId: action.data.card?.id });
   await routeAction(action, deps);
   return { status: 200 };
 }
@@ -147,6 +157,13 @@ async function handleCardUpdated(action: TrelloAction, deps: WebhookHandlerDeps)
   if (!cardId) return;
 
   const issueId = await syncStore.getByCardId(cardId);
+  ctx.logger.info("trello-sync: handleCardUpdated", {
+    cardId,
+    issueId,
+    syncStatusToPaperclip: config.syncStatusToPaperclip,
+    syncTitleToPaperclip: config.syncTitleToPaperclip,
+    listAfter: action.data.listAfter?.id,
+  });
   if (!issueId) return; // not synced
 
   const mapping = await syncStore.getByIssueId(issueId);
@@ -206,7 +223,19 @@ async function handleCardUpdated(action: TrelloAction, deps: WebhookHandlerDeps)
     await syncStore.touchMapping(issueId, "trello");
     await ctx.metrics.write("trello_sync.issue.updated", 1, { direction: "trello_to_pc" });
   } catch (err) {
-    ctx.logger.error("trello-sync: failed to update Paperclip issue from webhook", { issueId, cardId, err: String(err) });
+    const errMsg = String(err);
+    // Paperclip business rule: in_progress requires an assignee — warn instead of error, don't retry
+    if (errMsg.includes("require an assignee") || errMsg.includes("requires an assignee")) {
+      ctx.logger.warn("trello-sync: status update skipped — issue requires an assignee in Paperclip before moving to this status", { issueId, cardId, patch });
+      await ctx.activity.log({
+        companyId,
+        message: `⚠️ Trello Sync: no se pudo actualizar el estado a "${patch.status}" — el issue debe tener un agente asignado en Paperclip.`,
+        entityType: "issue",
+        entityId: issueId,
+      });
+      return;
+    }
+    ctx.logger.error("trello-sync: failed to update Paperclip issue from webhook", { issueId, cardId, patch, errMsg });
     await deps.pendingQueue.enqueue("update-issue", issueId, { issueId, patch });
     await ctx.metrics.write("trello_sync.error", 1, { type: "update_issue" });
   }

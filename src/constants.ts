@@ -62,20 +62,20 @@ export const DEFAULT_LIST_NAMES: Record<StatusKey, string> = {
 };
 
 export const PRIORITY_COLORS: Record<string, string> = {
-  urgent: "red",
+  critical: "red",
   high: "orange",
   medium: "yellow",
   low: "green",
 };
 
 export const PRIORITY_LABEL_NAMES: Record<string, string> = {
-  urgent: "Urgente",
+  critical: "Crítica",
   high: "Alta",
   medium: "Media",
   low: "Baja",
 };
 
-export const PRIORITY_KEYS = ["urgent", "high", "medium", "low"] as const;
+export const PRIORITY_KEYS = ["critical", "high", "medium", "low"] as const;
 export type PriorityKey = (typeof PRIORITY_KEYS)[number];
 
 export const MAX_RETRY_ATTEMPTS = 3;
