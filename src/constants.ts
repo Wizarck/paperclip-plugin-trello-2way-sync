@@ -12,6 +12,8 @@ export const STATE_KEYS = {
   initialSyncState: "initialSyncState",
   lastReconcileAt: "lastReconcileAt",
   lastError: "lastError",
+  autoListIds: "auto:listIds",
+  autoLabelIds: "auto:labelIds",
   pending: (op: string, id: string) => `pending:${op}:${id}`,
 } as const;
 

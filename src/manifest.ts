@@ -18,7 +18,6 @@ export const manifest: PaperclipPluginManifestV1 = {
     "activity.log.write",
     "plugin.state.read",
     "plugin.state.write",
-    "secrets.read-ref",
     "http.outbound",
     "jobs.schedule",
     "webhooks.receive",
@@ -35,79 +34,33 @@ export const manifest: PaperclipPluginManifestV1 = {
       // Credentials
       apiKeyRef: {
         type: "string",
-        format: "secret-ref",
         title: "Trello API Key",
         description:
-          "Your Trello API Key from trello.com/app-key",
+          "Your Trello API Key. Go to trello.com/power-ups/admin → your Power-Up → tab 'API Key'. If you don't have a Power-Up, create one (name only, no need to publish it).",
       },
       apiSecretRef: {
         type: "string",
-        format: "secret-ref",
         title: "Trello API Secret",
         description:
-          "Your Trello API Secret (for webhook HMAC verification). Generate it at trello.com/app-key → 'Generate a new secret'.",
+          "Your Trello API Secret (used to verify webhook signatures). On the same page as the API Key, click 'Generate a new secret'.",
       },
       tokenRef: {
         type: "string",
-        format: "secret-ref",
         title: "Trello Token",
         description:
-          "Your Trello Token from trello.com/app-key → 'Generate a Token'.",
+          "Your Trello Token. Open this URL in your browser replacing YOUR_KEY with your API Key: https://trello.com/1/authorize?expiration=never&scope=read,write&response_type=token&key=YOUR_KEY — Trello will display the token directly.",
       },
       boardId: {
         type: "string",
         title: "Trello Board ID",
         description:
-          "The ID of the Trello board to sync with. Use the 'Get my boards' bridge data to select a board.",
+          "The ID of the Trello board to sync with. Open your board in Trello and add '.json' to the URL — the 'id' field at the top is your Board ID. On first activation, the plugin will automatically create 7 lists on this board (Pendiente, Por Hacer, En Progreso, En Revisión, Bloqueado, Completado, Cancelado) and 4 priority labels (Urgente, Alta, Media, Baja). These lists will be used for all sync operations — do not delete or rename them.",
       },
       paperclipBaseUrl: {
         type: "string",
         title: "Paperclip Public URL",
         description:
-          "Public HTTPS URL of this Paperclip instance (required for Trello→Paperclip sync via webhooks). Example: https://paperclip.yourdomain.com",
-      },
-
-      // List names used when auto-creating lists
-      listNames: {
-        type: "object",
-        title: "Trello List Names",
-        description: "Names for the Trello lists (created automatically by the 'Create default lists' action).",
-        properties: {
-          backlog: { type: "string", default: "Pendiente", title: "Backlog" },
-          todo: { type: "string", default: "Por Hacer", title: "To Do" },
-          in_progress: { type: "string", default: "En Progreso", title: "In Progress" },
-          in_review: { type: "string", default: "En Revisión", title: "In Review" },
-          blocked: { type: "string", default: "Bloqueado", title: "Blocked" },
-          done: { type: "string", default: "Completado", title: "Done" },
-          cancelled: { type: "string", default: "Cancelado", title: "Cancelled" },
-        },
-      },
-
-      // Auto-filled by bridge action "createDefaultLists"
-      listIds: {
-        type: "object",
-        title: "Trello List IDs (auto-filled)",
-        description: "Filled automatically by the 'Create default lists' action. You can also set them manually.",
-        properties: {
-          backlog: { type: "string", title: "Backlog list ID" },
-          todo: { type: "string", title: "To Do list ID" },
-          in_progress: { type: "string", title: "In Progress list ID" },
-          in_review: { type: "string", title: "In Review list ID" },
-          blocked: { type: "string", title: "Blocked list ID" },
-          done: { type: "string", title: "Done list ID" },
-          cancelled: { type: "string", title: "Cancelled list ID" },
-        },
-      },
-      labelIds: {
-        type: "object",
-        title: "Trello Priority Label IDs (auto-filled)",
-        description: "Filled automatically by the 'Create default lists' action.",
-        properties: {
-          urgent: { type: "string", title: "Urgent label ID (red)" },
-          high: { type: "string", title: "High label ID (orange)" },
-          medium: { type: "string", title: "Medium label ID (yellow)" },
-          low: { type: "string", title: "Low label ID (green)" },
-        },
+          "Public HTTPS URL of this Paperclip instance. Required only for Trello→Paperclip sync (card moves, renames, archives updating Paperclip issues). When set, the plugin automatically registers a webhook in Trello — no manual setup needed. The registered URL will be: {this_url}/api/plugins/trello-sync/webhooks/trello-events. Leave empty if you only need Paperclip→Trello sync. Example: https://paperclip.yourdomain.com",
       },
 
       // Feature toggles — Paperclip → Trello

@@ -1,4 +1,3 @@
-import type { PluginStateClient } from "@paperclipai/plugin-sdk";
 import type { TrelloClient } from "./trello-client.js";
 import type { TrelloSyncConfig } from "./types.js";
 import { PRIORITY_KEYS, PRIORITY_COLORS, PRIORITY_LABEL_NAMES } from "./constants.js";
@@ -10,9 +9,7 @@ import { PRIORITY_KEYS, PRIORITY_COLORS, PRIORITY_LABEL_NAMES } from "./constant
  */
 export async function syncPriorityLabels(
   trello: TrelloClient,
-  config: TrelloSyncConfig,
-  state: PluginStateClient,
-  companyId: string,
+  config: Pick<TrelloSyncConfig, "boardId" | "labelIds">,
 ): Promise<Record<string, string>> {
   const boardLabels = await trello.getBoardLabels(config.boardId);
   const labelIds: Record<string, string> = { ...config.labelIds };

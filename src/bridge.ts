@@ -17,6 +17,32 @@ export interface BridgeDeps {
   companyId: string;
 }
 
+// ─── Standalone helper (used by worker setup auto-provisioning) ───────────────
+
+export async function createDefaultListsAndLabels(
+  trello: TrelloClient,
+  config: TrelloSyncConfig,
+): Promise<{ listIds: Record<string, string>; labelIds: Record<string, string> }> {
+  const boardId = config.boardId;
+  const existingLists = await trello.getBoardLists(boardId);
+  const listIds: Record<string, string> = {};
+
+  for (const key of STATUS_KEYS) {
+    const name = (config.listNames?.[key as keyof typeof config.listNames]) ?? DEFAULT_LIST_NAMES[key];
+    const existing = existingLists.find((l) => l.name === name);
+    if (existing) {
+      listIds[key] = existing.id;
+    } else {
+      const created = await trello.createList(boardId, name);
+      listIds[key] = created.id;
+    }
+  }
+
+  const labelIds = await syncPriorityLabels(trello, { boardId, labelIds: config.labelIds });
+
+  return { listIds, labelIds };
+}
+
 export function registerBridgeHandlers(deps: BridgeDeps): void {
   const { ctx } = deps;
 
@@ -61,34 +87,16 @@ export function registerBridgeHandlers(deps: BridgeDeps): void {
     const config = await deps.getConfig();
     const trello = await deps.getTrello(config);
     const boardId = (params.boardId as string | undefined) ?? config.boardId;
-
-    if (!boardId) {
-      return { ok: false, error: "boardId is required" };
-    }
-
-    const listNames: Record<string, string> = {};
-    for (const key of STATUS_KEYS) {
-      listNames[key] = (config.listNames?.[key]) ?? DEFAULT_LIST_NAMES[key];
-    }
-
-    // Get existing lists
-    const existingLists = await trello.getBoardLists(boardId);
-    const listIds: Record<string, string> = {};
-
-    for (const key of STATUS_KEYS) {
-      const name = listNames[key];
-      const existing = existingLists.find((l) => l.name === name);
-      if (existing) {
-        listIds[key] = existing.id;
-      } else {
-        const created = await trello.createList(boardId, name);
-        listIds[key] = created.id;
-      }
-    }
-
-    // Create/sync priority labels
-    const labelIds = await syncPriorityLabels(trello, { ...config, boardId, listIds }, ctx.state, deps.companyId);
-
+    if (!boardId) return { ok: false, error: "boardId is required" };
+    const { listIds, labelIds } = await createDefaultListsAndLabels(trello, { ...config, boardId });
+    await ctx.state.set(
+      { scopeKind: "company", scopeId: deps.companyId, stateKey: STATE_KEYS.autoListIds },
+      listIds,
+    );
+    await ctx.state.set(
+      { scopeKind: "company", scopeId: deps.companyId, stateKey: STATE_KEYS.autoLabelIds },
+      labelIds,
+    );
     return { ok: true, listIds, labelIds };
   });
 

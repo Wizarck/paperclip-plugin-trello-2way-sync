@@ -58,16 +58,22 @@ export class TrelloClient {
     path: string,
     body?: Record<string, unknown>,
   ): Promise<T> {
-    const url = `${this.baseUrl}${path}?${this.authParams()}`;
+    const isReadMethod = method === "GET" || method === "HEAD";
+    let url = `${this.baseUrl}${path}?${this.authParams()}`;
+    if (isReadMethod && body != null) {
+      for (const [k, v] of Object.entries(body)) {
+        url += `&${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`;
+      }
+    }
 
     for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
       let res: Response;
       try {
         res = await fetch(url, {
           method,
-          body: body != null ? JSON.stringify(body) : undefined,
+          body: !isReadMethod && body != null ? JSON.stringify(body) : undefined,
           headers:
-            body != null
+            !isReadMethod && body != null
               ? { "Content-Type": "application/json" }
               : undefined,
           signal: AbortSignal.timeout(15_000),

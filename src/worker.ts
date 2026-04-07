@@ -9,7 +9,6 @@ import { handleIssueCreated, handleIssueUpdated } from "./event-handlers.js";
 import { handleTrelloWebhook } from "./webhook-handler.js";
 import { registerBridgeHandlers } from "./bridge.js";
 import { reconcileAllIssues } from "./reconcile.js";
-import { syncPriorityLabels } from "./labels.js";
 import {
   WEBHOOK_KEY,
   STATE_KEYS,
@@ -37,9 +36,31 @@ const plugin = definePlugin({
       return (await ctx.config.get()) as unknown as TrelloSyncConfig;
     }
 
+    // Returns config enriched with auto-provisioned listIds/labelIds from state
+    // so event handlers always have the IDs regardless of whether they are in config.
+    async function getEffectiveConfig(): Promise<TrelloSyncConfig> {
+      const config = await getConfig();
+      const hasListIds = STATUS_KEYS.some((k) => config.listIds?.[k as keyof typeof config.listIds]);
+      if (!hasListIds) {
+        const stateListIds = (await ctx.state.get({
+          scopeKind: "company",
+          scopeId: companyId,
+          stateKey: STATE_KEYS.autoListIds,
+        })) as Record<string, string> | null;
+        const stateLabelIds = (await ctx.state.get({
+          scopeKind: "company",
+          scopeId: companyId,
+          stateKey: STATE_KEYS.autoLabelIds,
+        })) as Record<string, string> | null;
+        if (stateListIds) config.listIds = stateListIds as TrelloSyncConfig["listIds"];
+        if (stateLabelIds) config.labelIds = stateLabelIds as TrelloSyncConfig["labelIds"];
+      }
+      return config;
+    }
+
     async function buildTrelloClient(config: TrelloSyncConfig): Promise<TrelloClient> {
-      const apiKey = await ctx.secrets.resolve(config.apiKeyRef);
-      const token = await ctx.secrets.resolve(config.tokenRef);
+      const apiKey = config.apiKeyRef;
+      const token = config.tokenRef;
       return new TrelloClient(apiKey, token);
     }
 
@@ -67,7 +88,7 @@ const plugin = definePlugin({
 
     ctx.events.on("issue.created", async (event) => {
       try {
-        const config = await getConfig();
+        const config = await getEffectiveConfig();
         if (!(config.createCardOnNewIssue ?? true)) return;
         const trello = await buildTrelloClient(config);
         await handleIssueCreated(event, {
@@ -86,7 +107,7 @@ const plugin = definePlugin({
 
     ctx.events.on("issue.updated", async (event) => {
       try {
-        const config = await getConfig();
+        const config = await getEffectiveConfig();
         const trello = await buildTrelloClient(config);
         await handleIssueUpdated(event, {
           ctx,
@@ -107,7 +128,7 @@ const plugin = definePlugin({
     ctx.jobs.register("reconcile", async () => {
       ctx.logger.info("trello-sync: starting reconcile job");
       try {
-        const config = await getConfig();
+        const config = await getEffectiveConfig();
         const trello = await buildTrelloClient(config);
         await reconcileAllIssues(ctx, trello, syncStore, config, companyId);
       } catch (err) {
@@ -122,8 +143,8 @@ const plugin = definePlugin({
     ctx.jobs.register("check-webhook-health", async () => {
       ctx.logger.info("trello-sync: checking webhook health");
       try {
-        const config = await getConfig();
-        if (!config.paperclipBaseUrl) return; // Webhooks not configured
+        const config = await getConfig(); // no list IDs needed here
+        if (!config.paperclipBaseUrl) return;
         const trello = await buildTrelloClient(config);
         const cb = callbackUrl(config);
         const isHealthy = await webhookReg.checkExists(trello, cb);
@@ -146,7 +167,7 @@ const plugin = definePlugin({
       // Full pending-queue processing would require a separate index key.
       // Current implementation: call reconcile to fix any drift.
       try {
-        const config = await getConfig();
+        const config = await getEffectiveConfig();
         const trello = await buildTrelloClient(config);
         await reconcileAllIssues(ctx, trello, syncStore, config, companyId);
       } catch (err) {
@@ -185,6 +206,43 @@ const plugin = definePlugin({
         config.boardId,
       );
 
+      // Auto-create default lists and labels if not yet provisioned
+      const storedListIds = (await ctx.state.get({
+        scopeKind: "company",
+        scopeId: companyId,
+        stateKey: STATE_KEYS.autoListIds,
+      })) as Record<string, string> | null;
+
+      const hasListIds =
+        storedListIds && STATUS_KEYS.some((k) => storedListIds[k]);
+
+      if (!hasListIds && config.boardId && config.apiKeyRef && config.tokenRef) {
+        ctx.logger.info(
+          "trello-sync: no list IDs found — auto-creating 7 lists and 4 priority labels on the board",
+        );
+        try {
+          const trello = await buildTrelloClient(config);
+          const { createDefaultListsAndLabels } = await import("./bridge.js");
+          const { listIds, labelIds } = await createDefaultListsAndLabels(
+            trello,
+            config,
+          );
+          await ctx.state.set(
+            { scopeKind: "company", scopeId: companyId, stateKey: STATE_KEYS.autoListIds },
+            listIds,
+          );
+          await ctx.state.set(
+            { scopeKind: "company", scopeId: companyId, stateKey: STATE_KEYS.autoLabelIds },
+            labelIds,
+          );
+          ctx.logger.info("trello-sync: auto-provisioning complete", { listIds, labelIds });
+        } catch (err) {
+          ctx.logger.warn("trello-sync: auto-create lists failed — will retry on next restart", {
+            err: String(err),
+          });
+        }
+      }
+
       // Register webhook if URL is configured
       if (config.paperclipBaseUrl && config.boardId) {
         const trello = await buildTrelloClient(config);
@@ -213,10 +271,23 @@ const plugin = definePlugin({
     const companyId = companies[0]?.id;
     if (!companyId) return;
 
-    const config = (await ctx.config.get()) as unknown as TrelloSyncConfig;
-    const apiKey = await ctx.secrets.resolve(config.apiKeyRef);
-    const apiSecret = await ctx.secrets.resolve(config.apiSecretRef);
-    const token = await ctx.secrets.resolve(config.tokenRef);
+    const baseConfig = (await ctx.config.get()) as unknown as TrelloSyncConfig;
+    // Enrich with auto-provisioned IDs from state
+    const stateListIds = (await ctx.state.get({
+      scopeKind: "company", scopeId: companyId, stateKey: STATE_KEYS.autoListIds,
+    })) as Record<string, string> | null;
+    const stateLabelIds = (await ctx.state.get({
+      scopeKind: "company", scopeId: companyId, stateKey: STATE_KEYS.autoLabelIds,
+    })) as Record<string, string> | null;
+    const hasListIds = STATUS_KEYS.some((k) => baseConfig.listIds?.[k as keyof typeof baseConfig.listIds]);
+    const config: TrelloSyncConfig = {
+      ...baseConfig,
+      listIds: hasListIds ? baseConfig.listIds : (stateListIds as TrelloSyncConfig["listIds"] ?? baseConfig.listIds),
+      labelIds: hasListIds ? baseConfig.labelIds : (stateLabelIds as TrelloSyncConfig["labelIds"] ?? baseConfig.labelIds),
+    };
+    const apiKey = config.apiKeyRef;
+    const apiSecret = config.apiSecretRef;
+    const token = config.tokenRef;
     const trello = new TrelloClient(apiKey, token);
     const syncStore = new SyncStore(ctx.state, companyId);
     const pendingQueue = new PendingQueue(ctx.state, companyId);
@@ -252,8 +323,8 @@ const plugin = definePlugin({
     if (!_pluginCtx) return { ok: true };
 
     try {
-      const apiKey = await _pluginCtx.secrets.resolve(c.apiKeyRef);
-      const token = await _pluginCtx.secrets.resolve(c.tokenRef);
+      const apiKey = c.apiKeyRef;
+      const token = c.tokenRef;
       const trello = new TrelloClient(apiKey, token);
 
       // Test connection
@@ -340,8 +411,8 @@ const plugin = definePlugin({
 
     try {
       if (config.apiKeyRef && config.tokenRef) {
-        const apiKey = await ctx.secrets.resolve(config.apiKeyRef);
-        const token = await ctx.secrets.resolve(config.tokenRef);
+        const apiKey = config.apiKeyRef;
+        const token = config.tokenRef;
         const trello = new TrelloClient(apiKey, token);
         trelloOk = await trello.ping();
 
@@ -384,8 +455,8 @@ const plugin = definePlugin({
       if (!companyId) return;
       const config = (await ctx.config.get()) as unknown as TrelloSyncConfig;
       if (!config.apiKeyRef || !config.tokenRef) return;
-      const apiKey = await ctx.secrets.resolve(config.apiKeyRef);
-      const token = await ctx.secrets.resolve(config.tokenRef);
+      const apiKey = config.apiKeyRef;
+      const token = config.tokenRef;
       const trello = new TrelloClient(apiKey, token);
       const webhookReg = new WebhookRegistration(ctx.state, ctx.logger, companyId);
       await webhookReg.deregister(trello);
