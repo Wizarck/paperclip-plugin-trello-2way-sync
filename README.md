@@ -9,6 +9,7 @@ Two-way sync between [Paperclip](https://paperclipai.com) issues and Trello card
 - Syncs title, description, and priority (as colored labels)
 - Optionally syncs changes back from Trello to Paperclip (requires a public URL)
 - Automatic webhook registration — no manual Trello setup needed
+- Auto-assigns new unassigned issues to a configurable Dispatcher agent
 
 ## Setup
 
@@ -74,6 +75,19 @@ On first activation, the plugin automatically creates **7 lists** and **4 priori
 
 > **Do not rename or delete these lists.** The plugin uses them for all sync operations.
 
+## Dispatcher agent (auto-assign)
+
+Paperclip requires issues to have an assignee before they can be moved to **In Progress**. To handle issues created without an assignee, the plugin supports a Dispatcher agent:
+
+1. Create an agent in Paperclip with **"Dispatcher"** in its name (e.g. "Dispatcher", "Task Dispatcher")
+2. Restart the plugin — it will automatically detect the agent by name and store its ID
+
+From that point on, any new issue created without an assignee is automatically assigned to the Dispatcher. This ensures issues can always be moved to In Progress without errors.
+
+The Dispatcher agent is re-detected on every plugin restart, so if you rename or recreate it, just restart the plugin to pick up the change.
+
+> If no Dispatcher agent is found, unassigned issues are left as-is.
+
 ## Trello→Paperclip sync (optional)
 
 To receive updates from Trello back into Paperclip, the plugin needs a public HTTPS URL so Trello can send webhook events.
@@ -93,6 +107,8 @@ Once configured, enable any of the Trello→Paperclip toggles:
 - Sync description from Trello to Paperclip
 - Update issue priority when label changes
 - Cancel issue when card is archived
+
+> When a card is moved to **En Progreso** from Trello and the issue has no assignee, the plugin automatically assigns the Dispatcher and retries the status update.
 
 ## Scheduled jobs
 
