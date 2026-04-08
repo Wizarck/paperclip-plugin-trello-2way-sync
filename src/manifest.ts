@@ -23,6 +23,7 @@ export const manifest: PaperclipPluginManifestV1 = {
     "webhooks.receive",
     "metrics.write",
     "companies.read",
+    "agents.read",
   ],
   entrypoints: {
     worker: "./dist/worker.js",

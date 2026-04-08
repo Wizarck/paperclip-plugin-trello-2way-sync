@@ -14,6 +14,7 @@ export const STATE_KEYS = {
   lastError: "lastError",
   autoListIds: "auto:listIds",
   autoLabelIds: "auto:labelIds",
+  autoDefaultAgentId: "auto:defaultAgentId",
   pending: (op: string, id: string) => `pending:${op}:${id}`,
 } as const;
 
@@ -41,11 +42,10 @@ export const STATUS_MAP: Record<string, StatusKey> = {
 };
 
 // Reverse map: list config key → Paperclip status
-// in_progress maps to in_review because Paperclip requires an assignee for in_progress
 export const REVERSE_STATUS_MAP: Record<StatusKey, string> = {
   backlog: "backlog",
   todo: "todo",
-  in_progress: "in_review",
+  in_progress: "in_progress",
   in_review: "in_review",
   blocked: "blocked",
   done: "done",

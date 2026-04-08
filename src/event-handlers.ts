@@ -4,7 +4,7 @@ import type { TrelloClient } from "./trello-client.js";
 import type { SyncStore } from "./sync-store.js";
 import type { PendingQueue } from "./pending-queue.js";
 import { getLabelIdForPriority } from "./labels.js";
-import { DEBOUNCE_MS, PLUGIN_ID } from "./constants.js";
+import { DEBOUNCE_MS, PLUGIN_ID, STATE_KEYS } from "./constants.js";
 import { TrelloNotFoundError } from "./trello-client.js";
 
 export interface HandlerDeps {
@@ -64,6 +64,24 @@ export async function handleIssueCreated(
   let desc = (config.syncDescToTrello ?? true) ? (issue.description ?? "") : "";
   // Append sync tag to Trello description
   desc = appendSyncTag(desc, issueId);
+
+  // Auto-assign to the Dispatcher agent if the issue has no assignee.
+  // The Dispatcher agent ID is auto-detected at startup (name contains "dispatcher").
+  if (!issue.assigneeAgentId) {
+    const defaultAgentId = (await ctx.state.get({
+      scopeKind: "company" as const,
+      scopeId: companyId,
+      stateKey: STATE_KEYS.autoDefaultAgentId,
+    })) as string | null;
+    if (defaultAgentId) {
+      try {
+        await ctx.issues.update(issueId, { assigneeAgentId: defaultAgentId }, companyId);
+        ctx.logger.info("trello-sync: auto-assigned Dispatcher to new issue", { issueId, defaultAgentId });
+      } catch (assignErr) {
+        ctx.logger.warn("trello-sync: failed to auto-assign Dispatcher", { issueId, errMsg: String(assignErr) });
+      }
+    }
+  }
 
   try {
     const card = await trello.createCard({

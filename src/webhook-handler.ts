@@ -164,13 +164,22 @@ async function handleCardUpdated(action: TrelloAction, deps: WebhookHandlerDeps)
     syncTitleToPaperclip: config.syncTitleToPaperclip,
     listAfter: action.data.listAfter?.id,
   });
-  if (!issueId) return; // not synced
+  if (!issueId) {
+    ctx.logger.info("trello-sync: handleCardUpdated skip — no issue mapping for card", { cardId });
+    return; // not synced
+  }
 
   const mapping = await syncStore.getByIssueId(issueId);
-  if (!mapping) return;
+  if (!mapping) {
+    ctx.logger.info("trello-sync: handleCardUpdated skip — no mapping object for issue", { issueId });
+    return;
+  }
 
   // Debounce: if originated from Paperclip, skip
   if (syncStore.isDebounced(mapping, DEBOUNCE_MS, "paperclip")) {
+    ctx.logger.info("trello-sync: handleCardUpdated skip — debounce active", {
+      issueId, lastSyncedBy: mapping.lastSyncedBy, ageMs: Date.now() - mapping.lastSyncedAt,
+    });
     await ctx.metrics.write("trello_sync.debounce.skipped", 1);
     return;
   }
@@ -221,9 +230,38 @@ async function handleCardUpdated(action: TrelloAction, deps: WebhookHandlerDeps)
   try {
     await ctx.issues.update(issueId, patch as Parameters<typeof ctx.issues.update>[1], companyId);
     await syncStore.touchMapping(issueId, "trello");
+    ctx.logger.info("trello-sync: issue updated from Trello", { issueId, patch });
     await ctx.metrics.write("trello_sync.issue.updated", 1, { direction: "trello_to_pc" });
   } catch (err) {
     const errMsg = String(err);
+
+    // Paperclip requires an assignee for `in_progress`. Retry with the configured dispatcher agent.
+    if (
+      patch.status === "in_progress" &&
+      (errMsg.toLowerCase().includes("assignee") || errMsg.toLowerCase().includes("assign"))
+    ) {
+      const agentId = (await ctx.state.get({
+        scopeKind: "company" as const,
+        scopeId: companyId,
+        stateKey: "auto:defaultAgentId",
+      })) as string | null;
+
+      const retryPatch = agentId
+        ? { ...patch, assigneeAgentId: agentId }
+        : { ...patch, status: "in_review" }; // no agent configured — fall back to in_review
+
+      ctx.logger.info("trello-sync: retrying in_progress update", { issueId, agentId, retryPatch });
+
+      try {
+        await ctx.issues.update(issueId, retryPatch as Parameters<typeof ctx.issues.update>[1], companyId);
+        await syncStore.touchMapping(issueId, "trello");
+        await ctx.metrics.write("trello_sync.issue.updated", 1, { direction: "trello_to_pc" });
+        return;
+      } catch (retryErr) {
+        ctx.logger.error("trello-sync: retry also failed", { issueId, retryErrMsg: String(retryErr) });
+      }
+    }
+
     ctx.logger.error("trello-sync: failed to update Paperclip issue from webhook", { issueId, cardId, patch, errMsg });
     await deps.pendingQueue.enqueue("update-issue", issueId, { issueId, patch });
     await ctx.metrics.write("trello_sync.error", 1, { type: "update_issue" });

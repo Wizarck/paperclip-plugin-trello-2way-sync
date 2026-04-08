@@ -249,6 +249,34 @@ const plugin = definePlugin({
         const cb = callbackUrl(config);
         await webhookReg.ensureRegistered(trello, config.boardId, cb);
       }
+
+      // Auto-detect "Dispatcher" agent for unassigned-issue auto-assignment.
+      // Runs every startup so it picks up the agent if created after the plugin was installed.
+      try {
+        const allAgents = await ctx.agents.list({ companyId, limit: 100 });
+        const dispatcher = allAgents.find(
+          (a) => (a.name ?? "").toLowerCase().includes("dispatcher"),
+        );
+        const storedId = (await ctx.state.get({
+          scopeKind: "company",
+          scopeId: companyId,
+          stateKey: STATE_KEYS.autoDefaultAgentId,
+        })) as string | null;
+        if (dispatcher && dispatcher.id !== storedId) {
+          await ctx.state.set(
+            { scopeKind: "company", scopeId: companyId, stateKey: STATE_KEYS.autoDefaultAgentId },
+            dispatcher.id,
+          );
+          ctx.logger.info("trello-sync: Dispatcher agent auto-detected and stored", {
+            agentId: dispatcher.id, agentName: dispatcher.name,
+          });
+        } else if (!dispatcher && storedId) {
+          ctx.logger.info("trello-sync: Dispatcher agent no longer found, keeping existing stored ID", { storedId });
+        }
+      } catch (err) {
+        ctx.logger.warn("trello-sync: could not auto-detect Dispatcher agent", { err: String(err) });
+      }
+
     } catch (err) {
       ctx.logger.warn("trello-sync: initial setup incomplete (config may not be set yet)", {
         err: String(err),
