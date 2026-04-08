@@ -1,4 +1,4 @@
-# paperclip-plugin-trello-sync
+# paperclip-plugin-trello-2way-sync
 
 Two-way sync between [Paperclip](https://paperclipai.com) issues and Trello cards.
 

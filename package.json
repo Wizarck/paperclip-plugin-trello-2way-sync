@@ -1,5 +1,5 @@
 {
-  "name": "paperclip-plugin-trello-sync",
+  "name": "paperclip-plugin-trello-2way-sync",
   "version": "1.0.0",
   "description": "Two-way sync between Paperclip issues and Trello cards with configurable list mapping, priority labels, and feature toggles",
   "type": "module",
@@ -37,6 +37,6 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/paperclipai/paperclip-plugin-trello-sync.git"
+    "url": "git+https://github.com/Wizarck/paperclip-plugin-trello-2way-sync.git"
   }
 }
